@@ -1,7 +1,7 @@
 # vropslambdafunction
 AWS Lambda Function for Alexa Trigger
 
-Works with vropsrelay.py installed as a "DZ" to allow the function indirect access to vR Ops API.  See https://github.com/johnddias/vropsrelay for information.
+Works with vropsrelay.py installed in a "DMZ" to allow the function indirect access to vR Ops API.  See https://github.com/johnddias/vropsrelay for information.
 
 This function leverages third-party Python modules.  You will need to upload the zip file to your lambda instance, which contains:
 
