@@ -1,6 +1,6 @@
-import requests
-
 from __future__ import print_function
+import requests
+import json
 
 url = 'http://174.69.134.193:5001'
 
@@ -46,12 +46,12 @@ def get_welcome_response():
     session_attributes = {}
     card_title = "Welcome"
     speech_output = "Welcome to vRealize Operations. " \
-                    "To get started, ask me for the status of a monitored resource for example," \
-                    "what is the status of msbu-west?"
+                    "To get started, ask me for the major badge status of a resource kind.  For example," \
+                    "what is the health status of virtual machines?"
     # If the user either does not reply to the welcome message or says something
     # that is not understood, they will be prompted again with this text.
-    reprompt_text = "Ask me for the status of a monitored resource, " \
-                    "what is the status of msbu-west?"
+    reprompt_text = "ask me for the major badge status of a resource kind, " \
+                    "what is the health status of virtual machines?"
     should_end_session = False
     return build_response(session_attributes, build_speechlet_response(
         card_title, speech_output, reprompt_text, should_end_session))
@@ -66,32 +66,67 @@ def handle_session_end_request():
     return build_response({}, build_speechlet_response(
         card_title, speech_output, None, should_end_session))
 
-def alerts_by_serv(alerts,sev):
-    filteredAlerts = {}
+def translate_resource_intent(intent):
+    print("Stated intent " + intent['slots']['resource']['value'])
+    resString = ""
+    vropsResKindString = {
+        'bm':'virtualmachine',
+        'vm':'virtualmachine',
+        'host': 'hostsystem',
+        'cluster': 'clustercomputeresource',
+        'datastore': 'datastore'
+    }
+
+#    if intent['slots']['resource']['value'] in vropsResKindString:
+    resString = vropsResKindString.get(intent['slots']['resource']['value'].lower())
+    return resString
+
+def speechify_resource_intent(intent,plurality):
+        vocalString = ""
+        vocalStrings = {
+            'bm':'virtualmachine',
+            'vm':'virtual machine',
+            'host': 'host system',
+            'cluster': 'cluster',
+            'datastore': 'data store'
+        }
+        if plurality:
+            vocalString = vocalStrings.get(intent['slots']['resource']['value'].lower()) + "s"
+        else:
+            vocalString = vocalStrings.get(intent['slots']['resource']['value'].lower())
+        return vocalString
+
+def alerts_by_sev(alerts,sev):
+    filteredAlerts = []
     if any(x == sev for x in ["INFO","WARNING","IMMEDIATE","CRITICAL"]):
         for alert in alerts["alerts"]:
             if alert["alertLevel"] == sev:
                 filteredAlerts.append(alert)
     return filteredAlerts
-    else:
-        print("Invalid severity " + sev)     
+
 
 def get_impact_alerts_of_resource_kind(intent, session):
     card_title = intent['name']
     session_attributes = {}
     should_end_session = False
 
-    url = url + "/alerts" + intent['slots']['badge']['value'] + "/" + intent['slots']['resource']['value']
-    response = request.request("GET", url)
+    resString = translate_resource_intent(intent)
+
+    callurl = url + "/alerts/" + intent['slots']['badge']['value'] + "/" + resString
+    print(callurl)
+    response = requests.request("GET", callurl)
     alerts = json.loads(response.text)
 
-    numAllAlerts = len(alerts["alerts"])
-    numImmediateAlerts = len(alerts_by_sev(alerts,"IMMEDIATE"))
-    numCriticalAlerts = len(alerts_by_sev(alerts,"CRITICAL"))
-    
-    speech_output = "There are " + numAllAlerts + intent['slots']['badge']['value'] + "alerts for monitored " + intent['slots']['resource']['value'] + "."  + \
-                     "Of those " + numCriticalAlerts + " are critical and " + numImmediateAlerts + " are immediate." \
+    numAllAlerts = str(alerts["pageInfo"]["totalCount"])
+    numImmediateAlerts = str(len(alerts_by_sev(alerts,"IMMEDIATE")))
+    numCriticalAlerts = str(len(alerts_by_sev(alerts,"CRITICAL")))
+
+    speech_output = "There are " + numAllAlerts + " " + intent['slots']['badge']['value'] + " alerts for monitored " + speechify_resource_intent(intent,1) + ". "  + \
+                     "Of those " + numCriticalAlerts + " are critical and " + numImmediateAlerts + " are immediate."
     should_end_session = True
+
+    reprompt_text = "ask me for the major badge status of a resource kind, " \
+                    "what is the health status of virtual machines?"
 
     return build_response(session_attributes, build_speechlet_response(
         intent['name'], speech_output, reprompt_text, should_end_session))
