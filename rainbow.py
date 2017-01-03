@@ -2,7 +2,7 @@ from __future__ import print_function
 import requests
 import json
 
-url = 'http://174.69.134.193:5001'
+url = 'YOUR VROPSRELAY URL GOES HERE' #something like http://myopsrelay.net:5001
 
 
 # --------------- Helpers that build all of the responses ----------------------
