@@ -1,8 +1,11 @@
 from __future__ import print_function
 import requests
 import json
+from collections import Counter
 
 url = 'http://174.69.134.193:5001'
+# -------------Global vars for vR Ops-------------------------------------------
+alerts = {}
 
 
 # --------------- Helpers that build all of the responses ----------------------
@@ -15,8 +18,32 @@ def build_speechlet_response(title, output, reprompt_text, should_end_session):
         },
         'card': {
             'type': 'Simple',
-            'title': "SessionSpeechlet - " + title,
-            'content': "SessionSpeechlet - " + output
+            'title': "vRealize Operations - " + title,
+            'content': output
+        },
+        'reprompt': {
+            'outputSpeech': {
+                'type': 'PlainText',
+                'text': reprompt_text
+            }
+        },
+        'shouldEndSession': should_end_session
+    }
+
+def build_speechlet_response_image(title, output, reprompt_text, should_end_session):
+    return {
+        'outputSpeech': {
+            'type': 'PlainText',
+            'text': output
+        },
+        'card': {
+            'type': 'Standard',
+            'title': "vRealize Operations - " + title,
+            'image': {
+                "smallImageUrl": "https://s3-us-west-2.amazonaws.com/blackmesaresearch/vrops-logo-160x160.png",
+                "largeImageUrl": "https://s3-us-west-2.amazonaws.com/blackmesaresearch/vrops-logo-160x160.png"
+            },
+            'content': output
         },
         'reprompt': {
             'outputSpeech': {
@@ -45,25 +72,37 @@ def get_welcome_response():
 
     session_attributes = {}
     card_title = "Welcome"
-    speech_output = "Welcome to vRealize Operations. " \
-                    "To get started, ask me for the major badge status of a resource kind.  For example," \
-                    "what is the health status of virtual machines?"
+    speech_output = "Welcome to vRealize Operations. "
+
     # If the user either does not reply to the welcome message or says something
     # that is not understood, they will be prompted again with this text.
-    reprompt_text = "ask me for the major badge status of a resource kind, " \
-                    "what is the health status of virtual machines?"
+    reprompt_text = "ask me for all alerts of a resource kind for a major badge, " \
+                    "get all host alerts for health? "
+
     should_end_session = False
-    return build_response(session_attributes, build_speechlet_response(
+    return build_response(session_attributes, build_speechlet_response_image(
         card_title, speech_output, reprompt_text, should_end_session))
 
+def handle_help_request():
+    session_attributes = {}
+    card_title = "Voice Input Help"
+    speech_output = "To get started, ask me for all resource kind alerts for a major badge.  For example," \
+        "Get all host alerts for health.  " \
+        "Valid resource kinds are, vm, host, datastore and cluster.  " \
+        "Valid badges are, health, risk and efficiency.  " \
+
+    should_end_session = False
+    return build_response(session_attributes, build_speechlet_response(
+        card_title, speech_output, None, should_end_session))
 
 def handle_session_end_request():
+    session_attributes = {}
     card_title = "Session Ended"
     speech_output = "Closing vRealize Operations session. " \
                     "Taste the Rainbow! "
     # Setting this to true ends the session and exits the skill.
     should_end_session = True
-    return build_response({}, build_speechlet_response(
+    return build_response(session_attributes, build_speechlet_response(
         card_title, speech_output, None, should_end_session))
 
 def translate_resource_intent(intent):
@@ -84,7 +123,7 @@ def translate_resource_intent(intent):
 def speechify_resource_intent(intent,plurality):
         vocalString = ""
         vocalStrings = {
-            'bm':'virtualmachine',
+            'bm':'virtual machine',
             'vm':'virtual machine',
             'host': 'host system',
             'cluster': 'cluster',
@@ -104,9 +143,31 @@ def alerts_by_sev(alerts,sev):
                 filteredAlerts.append(alert)
     return filteredAlerts
 
+#def top_n_resources(alerts):
+
+
+#------------Invocations-----------------------------------
+
+def get_top_alerts_of_resource_kind(intent, session):
+    card_title = "Top " + intent['slots']['num']['value'] + " active " + intent['slots']['badge']['value'] + " alerts for all " + intent['slots']['resource']['value'] + "."
+    session_attributes = {}
+    should_end_session = False
+
+    resString = translate_resource_intent(intent)
+
+    callurl = url + "/alerts/" + intent['slots']['badge']['value'] + "/" + resString
+    print(callurl)
+    response = requests.request("GET", callurl)
+    alerts = json.loads(response.text)
+
+    topAlerts = Counter(alerts['alertDefinitionName'])
+
+
+
+
 
 def get_impact_alerts_of_resource_kind(intent, session):
-    card_title = intent['name']
+    card_title = "Active " + intent['slots']['badge']['value'] + " alerts for all " + intent['slots']['resource']['value'] + "."
     session_attributes = {}
     should_end_session = False
 
@@ -123,12 +184,13 @@ def get_impact_alerts_of_resource_kind(intent, session):
 
     speech_output = "There are " + numAllAlerts + " " + intent['slots']['badge']['value'] + " alerts for monitored " + speechify_resource_intent(intent,1) + ". "  + \
                      "Of those " + numCriticalAlerts + " are critical and " + numImmediateAlerts + " are immediate."
-    should_end_session = True
 
-    reprompt_text = "ask me for the major badge status of a resource kind, " \
-                    "what is the health status of virtual machines?"
+    should_end_session = False
 
-    return build_response(session_attributes, build_speechlet_response(
+    reprompt_text = "ask me for all alerts of a resource kind for a major badge, " \
+                    "get all host alerts for health? "
+
+    return build_response(session_attributes, build_speechlet_response_image(
         intent['name'], speech_output, reprompt_text, should_end_session))
 
 
@@ -165,7 +227,7 @@ def on_intent(intent_request, session):
     if intent_name == "HealthStatusIntent":
         return get_impact_alerts_of_resource_kind(intent, session)
     elif intent_name == "AMAZON.HelpIntent":
-        return get_welcome_response()
+        return handle_help_request()
     elif intent_name == "AMAZON.CancelIntent" or intent_name == "AMAZON.StopIntent":
         return handle_session_end_request()
     else:
@@ -196,9 +258,8 @@ def lambda_handler(event, context):
     prevent someone else from configuring a skill that sends requests to this
     function.
     """
-    # if (event['session']['application']['applicationId'] !=
-    #         "amzn1.echo-sdk-ams.app.[unique-value-here]"):
-    #     raise ValueError("Invalid Application ID")
+    #if event['session']['application']['applicationId'] != "amzn1.echo-sdk-ams.app.amzn1.ask.skill.c79aaa7c-25a0-4d7c-96a6-c4239ba171c8":
+    #    raise ValueError("Invalid Application ID")
 
     if event['session']['new']:
         on_session_started({'requestId': event['request']['requestId']},
