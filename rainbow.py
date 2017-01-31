@@ -3,9 +3,13 @@ import requests
 import json
 from collections import Counter
 
+<<<<<<< HEAD
 url = 'http://174.69.134.193:5001'
 # -------------Global vars for vR Ops-------------------------------------------
 alerts = {}
+=======
+url = 'YOUR VROPSRELAY URL GOES HERE' #something like http://myopsrelay.net:5001
+>>>>>>> b693359de95d225d30ca7c5a653ab0b5422a99e4
 
 
 # --------------- Helpers that build all of the responses ----------------------
