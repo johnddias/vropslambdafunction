@@ -102,8 +102,7 @@ def handle_help_request():
 def handle_session_end_request():
     session_attributes = {}
     card_title = "Session Ended"
-    speech_output = "Closing vRealize Operations session. " \
-                    "Taste the Rainbow! "
+    speech_output = "Closing vRealize Operations session. "
     # Setting this to true ends the session and exits the skill.
     should_end_session = True
     return build_response(session_attributes, build_speechlet_response(
